@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jom Kenali Wang - Balloon Pop AR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Hands & Camera Utils CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Fredoka', cursive, sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+        }
+        .floating-bg {
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+        }
+        .pulse-glow {
+            box-shadow: 0 0 20px rgba(236, 72, 153, 0.8);
+            animation: pulseGlow 1.5s infinite alternate;
+        }
+        @keyframes pulseGlow {
+            0% { transform: scale(1); opacity: 0.9; }
+            100% { transform: scale(1.15); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="floating-bg min-h-screen flex flex-col justify-between overflow-x-hidden text-slate-800">
+
+    <header class="w-full bg-white/90 backdrop-blur shadow-md px-4 py-3 flex flex-wrap items-center justify-between gap-2 z-20">
+        <div class="flex items-center space-x-2">
+            <span class="text-3xl">🎈</span>
+            <h1 class="text-xl sm:text-2xl font-bold text-indigo-600">Jom Kenali Wang!</h1>
+        </div>
+        
+        <div class="flex items-center space-x-2 sm:space-x-4">
+            <button id="bgm-toggle-btn" onclick="toggleAudio()" class="bg-amber-400 hover:bg-amber-500 text-slate-900 font-bold px-3 py-1.5 rounded-full text-xs sm:text-sm flex items-center shadow transition whitespace-nowrap">
+                <span id="bgm-icon" class="mr-1">🎵</span> <span id="bgm-text">Muzik On</span>
+            </button>
+            <button id="cam-toggle-btn" onclick="toggleCamera()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-full text-xs sm:text-sm flex items-center shadow transition whitespace-nowrap">
+                <span class="mr-1">📷</span> <span id="cam-btn-text">Buka Kamera</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col items-center justify-center p-2 sm:p-4 relative w-full max-w-4xl mx-auto">
+
+        <!-- Screen 1: Start Screen -->
+        <div id="start-screen" class="bg-white/95 rounded-3xl p-6 sm:p-8 shadow-2xl text-center max-w-lg w-full z-10 my-auto border-4 border-indigo-200">
+            <div class="text-6xl mb-4 animate-bounce">🎈💵🎈</div>
+            <h2 class="text-3xl font-extrabold text-indigo-600 mb-2">Jom Kenali Wang!</h2>
+            <p class="text-slate-600 text-base sm:text-lg mb-6">Letupkan belon makanan dengan wang yang betul! Boleh guna lambaian jari/tangan kamera atau sentuhan skrin!</p>
+
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <div class="bg-blue-100 p-3 rounded-2xl border-2 border-blue-400 text-center">
+                    <div class="text-2xl font-bold text-blue-700">RM1</div>
+                    <div class="text-xs text-blue-600 font-semibold">Warna Biru</div>
+                </div>
+                <div class="bg-emerald-100 p-3 rounded-2xl border-2 border-emerald-400 text-center">
+                    <div class="text-2xl font-bold text-emerald-700">RM5</div>
+                    <div class="text-xs text-emerald-600 font-semibold">Warna Hijau</div>
+                </div>
+                <div class="bg-red-100 p-3 rounded-2xl border-2 border-red-400 text-center">
+                    <div class="text-2xl font-bold text-red-700">RM10</div>
+                    <div class="text-xs text-red-600 font-semibold">Warna Merah</div>
+                </div>
+            </div>
+
+            <button onclick="startGame()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-xl font-bold py-4 rounded-2xl shadow-lg transition transform hover:scale-105 active:scale-95 flex items-center justify-center">
+                <span>🚀 MULA BERMAIN</span>
+            </button>
+        </div>
+
+        <!-- Screen 2: Active Gameplay Screen -->
+        <div id="game-screen" class="hidden w-full flex flex-col items-center">
+            
+            <!-- Question Box & Progress Header -->
+            <div class="w-full bg-white/90 backdrop-blur rounded-2xl p-4 shadow-lg mb-3 border-2 border-indigo-300">
+                <div class="flex justify-between items-center mb-2">
+                    <span id="question-number" class="bg-indigo-100 text-indigo-700 text-sm font-bold px-3 py-1 rounded-full">Soalan 1/10</span>
+                    <div class="flex items-center space-x-1 bg-amber-100 px-3 py-1 rounded-full">
+                        <span class="text-lg">⭐</span>
+                        <span id="score-text" class="font-bold text-amber-700">0</span>
+                    </div>
+                </div>
+                <h3 id="question-text" class="text-xl sm:text-2xl font-extrabold text-slate-800 text-center py-1">
+                    Cari Belon Nilai Wang!
+                </h3>
+            </div>
+
+            <!-- AR / Canvas Play Area -->
+            <div class="relative w-full aspect-[4/3] max-h-[500px] bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border-4 border-white">
+                <!-- Video stream feed for AR -->
+                <video id="webcam-feed" class="hidden absolute inset-0 w-full h-full object-cover -scale-x-100" playsinline muted></video>
+                
+                <!-- Main Interactive Game Canvas -->
+                <canvas id="game-canvas" class="absolute inset-0 w-full h-full cursor-pointer"></canvas>
+
+                <!-- Status Banner for Camera Hand Detection -->
+                <div id="cam-status" class="hidden absolute top-3 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur text-white text-xs sm:text-sm px-4 py-1.5 rounded-full z-10 flex items-center space-x-2 border border-white/30 shadow-lg">
+                    <span id="cam-status-text">📸 Menyiapkan Kamera...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 3: Results & Reward Screen -->
+        <div id="result-screen" class="hidden bg-white/95 rounded-3xl p-8 shadow-2xl text-center max-w-md w-full z-10 my-auto border-4 border-amber-300">
+            <div class="text-6xl mb-3">🏆</div>
+            <h2 class="text-3xl font-extrabold text-amber-500 mb-1">Syabas Wira Cilik!</h2>
+            <p class="text-slate-600 mb-6">Anda telah berjaya mengenali wang Malaysia!</p>
+
+            <div class="bg-amber-50 rounded-2xl p-4 mb-6 border-2 border-amber-200">
+                <div class="text-sm text-slate-500 font-semibold mb-1">JUMLAH BINTANG AJAIB</div>
+                <div class="text-5xl font-extrabold text-amber-600 flex items-center justify-center">
+                    <span id="final-stars">10</span> <span class="ml-2 text-4xl">⭐</span>
+                </div>
+            </div>
+
+            <button onclick="restartGame()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-bold py-3.5 rounded-2xl shadow-lg transition transform hover:scale-105">
+                🔄 MAIN SEKALI LAGI
+            </button>
+        </div>
+
+    </main>
+
+    <script>
+        let audioCtx = null;
+        let audioEnabled = true;
+        let bgmTimer = null;
+        let bgmStep = 0;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            startBGM();
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const btnText = document.getElementById('bgm-text');
+            const btnIcon = document.getElementById('bgm-icon');
+            
+            if (audioEnabled) {
+                btnText.innerText = "Muzik On";
+                btnIcon.innerText = "🎵";
+                startBGM();
+            } else {
+                btnText.innerText = "Muzik Off";
+                btnIcon.innerText = "🔇";
+                stopBGM();
+            }
+        }
+
+        function startBGM() {
+            if (bgmTimer || !audioEnabled) return;
+            
+            // Muzik sintesis rancak 140 BPM
+            const melody = [
+                523.25, 659.25, 783.99, 659.25, 1046.50, 783.99, 880.00, 783.99,
+                659.25, 783.99, 523.25, 659.25, 587.33, 659.25, 523.25, 0
+            ];
+            const bass = [
+                130.81, 0, 130.81, 0, 174.61, 0, 196.00, 0,
+                130.81, 0, 164.81, 0, 174.61, 196.00, 130.81, 0
+            ];
+            
+            bgmTimer = setInterval(() => {
+                if (!audioEnabled || !audioCtx) return;
+                try {
+                    const step = bgmStep % melody.length;
+                    bgmStep++;
+
+                    const noteFreq = melody[step];
+                    const bassFreq = bass[step];
+
+                    if (noteFreq > 0) {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(noteFreq, audioCtx.currentTime);
+                        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.14);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 0.14);
+                    }
+
+                    if (bassFreq > 0) {
+                        const bOsc = audioCtx.createOscillator();
+                        const bGain = audioCtx.createGain();
+                        bOsc.type = 'sine';
+                        bOsc.frequency.setValueAtTime(bassFreq, audioCtx.currentTime);
+                        bGain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                        bGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                        bOsc.connect(bGain);
+                        bGain.connect(audioCtx.destination);
+                        bOsc.start();
+                        bOsc.stop(audioCtx.currentTime + 0.15);
+                    }
+                } catch (e) {}
+            }, 140);
+        }
+
+        function stopBGM() {
+            if (bgmTimer) {
+                clearInterval(bgmTimer);
+                bgmTimer = null;
+            }
+        }
+
+        function playPopSFX() {
+            if (!audioEnabled || !audioCtx) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(850, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.09);
+                gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.09);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.09);
+            } catch(e) {}
+        }
+
+        function playCorrectSFX() {
+            if (!audioEnabled || !audioCtx) return;
+            try {
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime + idx * 0.07);
+                    gain.gain.setValueAtTime(0.12, audioCtx.currentTime + idx * 0.07);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.07 + 0.2);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(audioCtx.currentTime + idx * 0.07);
+                    osc.stop(audioCtx.currentTime + idx * 0.07 + 0.2);
+                });
+            } catch(e) {}
+        }
+
+        function playWrongSFX() {
+            if (!audioEnabled || !audioCtx) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.14, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.22);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.22);
+            } catch(e) {}
+        }
+
+        // 10 Soalan Tema Makanan
+        const questions = [
+            {
+                prompt: "Ais krim coklat ini berharga RM1 🍦. Pilih belon wang yang betul!",
+                targetValue: "RM1",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Sebungkus nasi lemak daun pisang berharga RM1 🍛. Letupkan belon wang yang betul!",
+                targetValue: "RM1",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Sebiji epal merah manis berharga RM1 🍎. Cari belon wang yang betul!",
+                targetValue: "RM1",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Semangkuk mi sup ayam panas berharga RM5 🍜. Letupkan belon wang yang betul!",
+                targetValue: "RM5",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Sebotol susu segar ini berharga RM5 🥛. Pilih belon wang yang betul!",
+                targetValue: "RM5",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Sekotak bertih jagung (popcorn) berharga RM5 🍿. Cari belon wang yang betul!",
+                targetValue: "RM5",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Set burger dan kentang goreng berharga RM10 🍔. Letupkan belon wang yang betul!",
+                targetValue: "RM10",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Set pizza keju lazat berharga RM10 🍕. Pilih belon wang yang betul!",
+                targetValue: "RM10",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Sekotak donat comel ini berharga RM10 🍩. Cari belon wang yang betul!",
+                targetValue: "RM10",
+                options: ["RM1", "RM5", "RM10"]
+            },
+            {
+                prompt: "Kek cawan pelangi ini berharga RM1 🧁. Letupkan belon wang yang betul!",
+                targetValue: "RM1",
+                options: ["RM1", "RM5", "RM10"]
+            }
+        ];
+
+        const moneyMeta = {
+            "RM1": { color: "#2563eb", text: "RM1" },
+            "RM5": { color: "#059669", text: "RM5" },
+            "RM10": { color: "#dc2626", text: "RM10" }
+        };
+
+        let currentQuestionIdx = 0;
+        let totalStars = 0;
+        let balloons = [];
+        let isCameraActive = false;
+        let handCursor = { x: -100, y: -100, targetX: -100, targetY: -100, active: false };
+        let handLandmarksList = [];
+        let canvas, ctx;
+        let videoElement = null;
+        let cameraStream = null;
+
+        // PENGESAN JARI HUJAN & PERGERAKAN DUA ENJIN
+        let procCanvas = null, procCtx = null;
+        let prevPixelData = null;
+        let lastHandDetectTime = 0;
+
+        class Balloon {
+            constructor(val, x, y, speed) {
+                this.value = val;
+                this.x = x;
+                this.y = y;
+                this.radius = 52 + Math.random() * 8;
+                this.speed = speed;
+                this.meta = moneyMeta[val];
+                this.wobble = Math.random() * Math.PI * 2;
+                this.isPopped = false;
+            }
+
+            update(canvasHeight) {
+                this.y -= this.speed;
+                this.wobble += 0.05;
+                this.x += Math.sin(this.wobble) * 0.9;
+
+                if (this.y < -this.radius * 2) {
+                    this.y = canvasHeight + this.radius + Math.random() * 40;
+                }
+            }
+
+            draw(context) {
+                if (this.isPopped) return;
+
+                context.save();
+                context.beginPath();
+                context.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                context.fillStyle = this.meta.color;
+                context.shadowColor = 'rgba(0, 0, 0, 0.3)';
+                context.shadowBlur = 10;
+                context.fill();
+
+                // Highlight Kilatan
+                context.beginPath();
+                context.arc(this.x - this.radius * 0.3, this.y - this.radius * 0.3, this.radius * 0.28, 0, Math.PI * 2);
+                context.fillStyle = 'rgba(255, 255, 255, 0.45)';
+                context.fill();
+
+                // Tali Belon
+                context.beginPath();
+                context.moveTo(this.x, this.y + this.radius);
+                context.lineTo(this.x, this.y + this.radius + 24);
+                context.strokeStyle = '#ffffff';
+                context.lineWidth = 3.5;
+                context.stroke();
+
+                // Teks Duit
+                context.fillStyle = '#ffffff';
+                context.font = 'bold 26px Fredoka, sans-serif';
+                context.textAlign = 'center';
+                context.textBaseline = 'middle';
+                context.fillText(this.meta.text, this.x, this.y);
+
+                context.restore();
+            }
+
+            containsPoint(px, py) {
+                if (this.isPopped) return false;
+                const dist = Math.hypot(this.x - px, this.y - py);
+                return dist <= this.radius + 45; // Zon sentuhan mesra budak (sangat peka)
+            }
+        }
+
+        function startGame() {
+            initAudio();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+
+            canvas = document.getElementById('game-canvas');
+            ctx = canvas.getContext('2d');
+            videoElement = document.getElementById('webcam-feed');
+
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            canvas.addEventListener('click', handleCanvasClick);
+            canvas.addEventListener('touchstart', handleCanvasTouch, { passive: false });
+
+            currentQuestionIdx = 0;
+            totalStars = 0;
+            document.getElementById('score-text').innerText = totalStars;
+
+            loadQuestion(currentQuestionIdx);
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resizeCanvas() {
+            if (!canvas) return;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+
+        function loadQuestion(idx) {
+            const q = questions[idx];
+            document.getElementById('question-number').innerText = `Soalan ${idx + 1}/${questions.length}`;
+            document.getElementById('question-text').innerText = q.prompt;
+
+            balloons = [];
+            const canvasW = canvas.width || 600;
+            const canvasH = canvas.height || 450;
+
+            const values = [...q.options, q.targetValue];
+            values.forEach((val, i) => {
+                const x = (canvasW / (values.length + 1)) * (i + 1) + (Math.random() * 20 - 10);
+                const y = canvasH + 50 + i * 45;
+                const speed = 1.3 + Math.random() * 0.7;
+                balloons.push(new Balloon(val, x, y, speed));
+            });
+        }
+
+        function handleCanvasClick(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            checkBalloonHit(clickX, clickY);
+        }
+
+        function handleCanvasTouch(e) {
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                const rect = canvas.getBoundingClientRect();
+                const touchX = e.touches[0].clientX - rect.left;
+                const touchY = e.touches[0].clientY - rect.top;
+                checkBalloonHit(touchX, touchY);
+            }
+        }
+
+        function checkBalloonHit(px, py) {
+            const q = questions[currentQuestionIdx];
+
+            for (let b of balloons) {
+                if (b.containsPoint(px, py)) {
+                    b.isPopped = true;
+                    playPopSFX();
+
+                    if (b.value === q.targetValue) {
+                        playCorrectSFX();
+                        totalStars += 1;
+                        document.getElementById('score-text').innerText = totalStars;
+
+                        setTimeout(() => {
+                            currentQuestionIdx++;
+                            if (currentQuestionIdx < questions.length) {
+                                loadQuestion(currentQuestionIdx);
+                            } else {
+                                showResults();
+                            }
+                        }, 600);
+                    } else {
+                        playWrongSFX();
+                        setTimeout(() => {
+                            b.isPopped = false;
+                        }, 1000);
+                    }
+                    break;
+                }
+            }
+        }
+
+        function showResults() {
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            document.getElementById('final-stars').innerText = totalStars;
+        }
+
+        function restartGame() {
+            startGame();
+        }
+
+        function gameLoop() {
+            if (!ctx || !canvas) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Lukis latar video webcam jika aktif
+            if (isCameraActive && videoElement && videoElement.readyState >= 2) {
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.drawImage(videoElement, -canvas.width, 0, canvas.width, canvas.height);
+                ctx.restore();
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Jalankan Pengecam Jari Optikal jika MediaPipe tidak merespons
+                processRealtimeFingerTracking();
+            }
+
+            // Lukis Belon
+            balloons.forEach(b => {
+                b.update(canvas.height);
+                b.draw(ctx);
+            });
+
+            // Lukis Sendi Tangan jika dikesan oleh MediaPipe AI
+            if (isCameraActive && handLandmarksList && handLandmarksList.length > 0) {
+                ctx.save();
+                ctx.fillStyle = '#38bdf8';
+                for (let pt of handLandmarksList) {
+                    const sx = (1 - pt.x) * canvas.width;
+                    const sy = pt.y * canvas.height;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            // PERGERAKAN PENUNJUK JARI (Glow Finger Target Pointer)
+            if (handCursor.active) {
+                handCursor.x += (handCursor.targetX - handCursor.x) * 0.55;
+                handCursor.y += (handCursor.targetY - handCursor.y) * 0.55;
+
+                ctx.save();
+                
+                // Ring Luar Menyala
+                ctx.beginPath();
+                ctx.arc(handCursor.x, handCursor.y, 42, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(236, 72, 153, 0.35)';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(handCursor.x, handCursor.y, 26, 0, Math.PI * 2);
+                ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(handCursor.x, handCursor.y, 9, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                // Emoji Jari
+                ctx.font = '36px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('👆', handCursor.x + 2, handCursor.y - 12);
+
+                checkBalloonHit(handCursor.x, handCursor.y);
+                ctx.restore();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        async function toggleCamera() {
+            const btnText = document.getElementById('cam-btn-text');
+            const statusBox = document.getElementById('cam-status');
+            const video = document.getElementById('webcam-feed');
+
+            if (!isCameraActive) {
+                try {
+                    btnText.innerText = "Membuka Kamera...";
+                    statusBox.classList.remove('hidden');
+                    document.getElementById('cam-status-text').innerText = "⌛ Menyiapkan kamera...";
+
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            facingMode: 'user'
+                        }
+                    });
+
+                    video.srcObject = stream;
+                    cameraStream = stream;
+                    await video.play();
+
+                    isCameraActive = true;
+                    btnText.innerText = "Matikan Kamera";
+                    document.getElementById('cam-status-text').innerText = "👆 Halakan jari/tangan anda ke kamera!";
+
+                    initMediaPipeAI();
+                } catch (err) {
+                    console.error("Camera error:", err);
+                    isCameraActive = false;
+                    btnText.innerText = "Buka Kamera";
+                    statusBox.classList.add('hidden');
+                    alert("Kamera tidak dapat dibuka. Sila izinkan akses kamera di pelayar anda.");
+                }
+            } else {
+                stopCamera();
+            }
+        }
+
+        function stopCamera() {
+            const btnText = document.getElementById('cam-btn-text');
+            const statusBox = document.getElementById('cam-status');
+
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+
+            isCameraActive = false;
+            handCursor.active = false;
+            handLandmarksList = [];
+            btnText.innerText = "Buka Kamera";
+            statusBox.classList.add('hidden');
+        }
+
+        function initMediaPipeAI() {
+            try {
+                if (window.Hands) {
+                    const hands = new window.Hands({
+                        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                    });
+
+                    hands.setOptions({
+                        maxNumHands: 1,
+                        modelComplexity: 1,
+                        minDetectionConfidence: 0.35,
+                        minTrackingConfidence: 0.35
+                    });
+
+                    hands.onResults((results) => {
+                        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                            lastHandDetectTime = Date.now();
+                            const landmarks = results.multiHandLandmarks[0];
+                            handLandmarksList = landmarks;
+
+                            // Hujung Jari Telunjuk (Index Finger Tip = 8)
+                            const indexTip = landmarks[8] || landmarks[5] || landmarks[0];
+                            if (indexTip && canvas) {
+                                const targetX = (1 - indexTip.x) * canvas.width;
+                                const targetY = indexTip.y * canvas.height;
+
+                                handCursor.targetX = targetX;
+                                handCursor.targetY = targetY;
+                                handCursor.active = true;
+
+                                const statusText = document.getElementById('cam-status-text');
+                                if (statusText) statusText.innerText = "🎯 Jari Dikesan! Gerakkan jari untuk meletupkan belon!";
+                            }
+                        }
+                    });
+
+                    const processAIFrames = async () => {
+                        if (isCameraActive && videoElement && videoElement.readyState >= 2) {
+                            try { await hands.send({ image: videoElement }); } catch(e) {}
+                        }
+                        if (isCameraActive) requestAnimationFrame(processAIFrames);
+                    };
+                    processAIFrames();
+                }
+            } catch(e) {
+                console.log("MediaPipe fallback to pure JS tracker:", e);
+            }
+        }
+
+        function processRealtimeFingerTracking() {
+            // Jika MediaPipe AI baru sahaja mengesan jari, utamakan AI
+            if (Date.now() - lastHandDetectTime < 800) return;
+
+            if (!videoElement || videoElement.videoWidth === 0) return;
+
+            if (!procCanvas) {
+                procCanvas = document.createElement('canvas');
+                procCanvas.width = 160;
+                procCanvas.height = 120;
+                procCtx = procCanvas.getContext('2d');
+            }
+
+            procCtx.drawImage(videoElement, 0, 0, 160, 120);
+            const frame = procCtx.getImageData(0, 0, 160, 120);
+            const data = frame.data;
+
+            let totalX = 0, totalY = 0, count = 0;
+            let minY = 120, topX = 80; // Untuk mengesan titik paling atas (hujung jari)
+
+            if (prevPixelData && prevPixelData.length === data.length) {
+                for (let i = 0; i < data.length; i += 8) {
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    const pr = prevPixelData[i], pg = prevPixelData[i+1], pb = prevPixelData[i+2];
+                    
+                    const diff = Math.abs(r - pr) + Math.abs(g - pg) + Math.abs(b - pb);
+                    
+                    if (diff > 30) {
+                        const pixelIdx = i / 4;
+                        const x = pixelIdx % 160;
+                        const y = Math.floor(pixelIdx / 160);
+                        
+                        totalX += x;
+                        totalY += y;
+                        count++;
+
+                        if (y < minY) {
+                            minY = y;
+                            topX = x;
+                        }
+                    }
+                }
+            }
+
+            prevPixelData = data;
+
+            if (count > 8 && canvas) {
+                // Skala & Cermin (Mirrored X)
+                const rawX = (1 - (topX / 160)) * canvas.width;
+                const rawY = (minY / 120) * canvas.height;
+                
+                handCursor.targetX = rawX;
+                handCursor.targetY = rawY;
+                handCursor.active = true;
+
+                const statusText = document.getElementById('cam-status-text');
+                if (statusText) statusText.innerText = "🖐️ Pengesan Gerakan Aktif! Lambaikan jari ke belon!";
+            }
+        }
+
+        window.onload = function() {
+            console.log("Jom Kenali Wang Game Ready!");
+        };
+    </script>
+</body>
+</html>
